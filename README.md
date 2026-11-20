@@ -265,3 +265,76 @@ go tool cover -html=cover.out -o cover.html
 поэтому общий процент по модулям ниже: ledger — 23.4%, gateway — 90.4%. Не покрыты
 также ветки 500 в обработчиках (после успешной валидации ledger не возвращает других
 ошибок, и вызвать их из теста нельзя) и логирование ошибки записи ответа в `writeJSON`.
+
+## hw-7
+
+Ledger хранит данные в PostgreSQL вместо памяти, отчёты и список бюджетов кешируются
+в Redis на 30 секунд. Gateway по-прежнему импортирует ledger как модуль; добавлен
+эндпоинт `GET /api/reports/summary`, остальные контракты не изменились.
+
+Подробности: [hw-7/ledger/README.md](hw-7/ledger/README.md) и
+[hw-7/gateway/README.md](hw-7/gateway/README.md).
+
+### 1. PostgreSQL и Redis
+
+В `hw-7/docker-compose.yml` описаны PostgreSQL 17 (порт **5433**, пользователь
+`postgres/postgres`, базы `cashapp` и `cashapp_test`) и Redis 7 (порт 6379).
+
+```bash
+cd hw-7
+docker compose up -d
+```
+
+### 2. Миграции
+
+```bash
+go install github.com/pressly/goose/v3/cmd/goose@latest
+export DATABASE_URL="postgres://postgres:postgres@localhost:5433/cashapp?sslmode=disable"
+goose -dir ./ledger/migrations postgres "$DATABASE_URL" up
+```
+
+Откат: `goose -dir ./ledger/migrations postgres "$DATABASE_URL" down`.
+
+### 3. Запуск
+
+Переменные: `DATABASE_URL` (или `DB_HOST`, `DB_PORT`, `DB_USER`, `DB_PASS`, `DB_NAME`),
+`REDIS_ADDR` (по умолчанию `localhost:6379`), `REDIS_DB` (`0`), `REDIS_PASSWORD`.
+
+Из корня репозитория, каждый в своём терминале:
+
+```bash
+cd hw-7/ledger && go run ./cmd/ledger     # проверка подключения и вывод данных из БД
+```
+
+```bash
+cd hw-7/gateway && go run .               # HTTP API на :8080
+```
+
+В PowerShell переменная задаётся так:
+`$env:DATABASE_URL="postgres://postgres:postgres@localhost:5433/cashapp?sslmode=disable"`.
+
+### 4. Проверка cURL
+
+```bash
+curl -X POST http://localhost:8080/api/budgets -H "Content-Type: application/json" \
+  -d '{"category":"food","limit":1000}'
+curl -X POST http://localhost:8080/api/transactions -H "Content-Type: application/json" \
+  -d '{"amount":450,"category":"food","description":"lunch","date":"2025-09-10"}'
+curl -X POST http://localhost:8080/api/transactions -H "Content-Type: application/json" \
+  -d '{"amount":600,"category":"food","description":"dinner","date":"2025-09-11"}'   # 409
+curl http://localhost:8080/api/transactions
+curl http://localhost:8080/api/budgets
+curl "http://localhost:8080/api/reports/summary?from=2025-09-01&to=2025-09-30"     # cache miss
+curl "http://localhost:8080/api/reports/summary?from=2025-09-01&to=2025-09-30"     # cache hit
+```
+
+### 5. Тесты
+
+```bash
+goose -dir ./ledger/migrations postgres "postgres://postgres:postgres@localhost:5433/cashapp_test?sslmode=disable" up
+export TEST_DATABASE_URL="postgres://postgres:postgres@localhost:5433/cashapp_test?sslmode=disable"
+cd hw-7/ledger && go test ./... -cover
+cd hw-7/gateway && go test ./... -cover
+```
+
+Покрытие: `ledger` — 81%, `gateway/internal/api` — 88%.
