@@ -46,7 +46,7 @@ func TestTimeoutMiddleware(t *testing.T) {
 	if !ok {
 		t.Fatal("у контекста запроса нет дедлайна")
 	}
-	if d := deadline.Sub(start); d <= 0 || d > time.Second {
+	if d := deadline.Sub(start); d < time.Second || d > time.Second+100*time.Millisecond {
 		t.Errorf("дедлайн через %s, ожидали ~1s", d)
 	}
 }

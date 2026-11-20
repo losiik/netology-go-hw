@@ -404,3 +404,40 @@ export DATABASE_URL="postgres://postgres:postgres@localhost:5433/cashapp?sslmode
 go run .                         # таймаут 2s
 REQUEST_TIMEOUT=1ms go run .     # проверка таймаута
 ```
+
+## hw-10
+
+Пакетный импорт транзакций: конвейер на каналах в Ledger и эндпоинт в Gateway.
+Подробно: [hw-10/ledger/README.md](hw-10/ledger/README.md), [hw-10/gateway/README.md](hw-10/gateway/README.md).
+
+```
+POST /api/transactions/bulk?workers=4
+```
+
+Тело — JSON-массив транзакций в формате `POST /api/transactions`. `workers` — от 1 до 32,
+по умолчанию 4. Ответ `200` со сводкой, даже если часть элементов отклонена:
+
+```json
+{"total":5,"accepted":2,"rejected":3,"errors":[{"index":1,"error":"сумма должна быть больше 0, получено -5.00"},{"index":3,"error":"budget exceeded"},{"index":4,"error":"неверный формат даты \"2025-13-01\", нужен ГГГГ-ММ-ДД"}]}
+```
+
+При таймауте — `504` с `{"error":"request timeout", ...}` и частичной сводкой.
+
+```bash
+curl -i -X POST "http://localhost:8080/api/transactions/bulk?workers=4" \
+  -H "Content-Type: application/json" \
+  -d '[{"amount":120,"category":"food","date":"2025-09-10"},{"amount":-5,"category":"food","date":"2025-09-10"}]'
+```
+
+Ledger: producer → канал `jobs` → N воркеров (`sync.WaitGroup`) → канал `results` →
+коллектор (`atomic.AddInt64` для счётчиков, срез ошибок пишет только коллектор).
+`ctx` проверяется в воркерах через `select` и передаётся во все запросы к БД.
+
+### Проверка гонок
+
+`-race` требует cgo и gcc. На Windows без gcc тесты гоняются в контейнере golang:
+
+```bash
+docker run --rm -v "$(pwd)/hw-10:/src" -v gomodcache:/go/pkg/mod -e CGO_ENABLED=1 golang:1.27 \
+  bash -c "cd /src/ledger && go test ./... -race && cd /src/gateway && go test ./... -race"
+```
