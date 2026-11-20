@@ -338,3 +338,48 @@ cd hw-7/gateway && go test ./... -cover
 ```
 
 Покрытие: `ledger` — 81%, `gateway/internal/api` — 88%.
+
+## hw-8
+
+Ledger разделён на слои; Gateway работает через интерфейс сервиса и фабрику.
+HTTP-контракты не изменились. Подробно: [hw-8/ledger/README.md](hw-8/ledger/README.md),
+[hw-8/gateway/README.md](hw-8/gateway/README.md).
+
+```
+hw-8/ledger/
+├── ledger.go               фасад: ledger.Service, ledger.New(ctx), типы и ошибки
+└── internal/
+    ├── domain/             сущности, Validate(), ошибки, интерфейсы репозиториев
+    ├── repository/pg/      реализация на PostgreSQL
+    ├── repository/memory/  реализация в памяти (тесты)
+    ├── service/            бизнес-правила (лимит бюджета, отчёт, кеш)
+    └── app/                сборка: env → БД → Redis → репозитории → сервис
+```
+
+Зависимости направлены внутрь: domain ни от чего не зависит, repository и service
+зависят от domain, app собирает всё вместе, gateway знает только `ledger.Service`
+и `ledger.New`.
+
+Инициализация в Gateway:
+
+```go
+svc, closeFn, err := ledger.New(ctx)   // читает env, подключает PostgreSQL и Redis
+if err != nil { log.Fatal(err) }
+defer closeFn()
+http.ListenAndServe(":8080", api.NewRouter(svc))
+```
+
+Запуск — как в hw-7 (те же контейнеры, миграции и переменные), только из папки `hw-8`:
+
+```bash
+cd hw-8/gateway
+export DATABASE_URL="postgres://postgres:postgres@localhost:5433/cashapp?sslmode=disable"
+go run .
+```
+
+Тесты:
+
+```bash
+cd hw-8/ledger && go test ./...
+cd hw-8/gateway && go test ./...
+```
