@@ -383,3 +383,24 @@ go run .
 cd hw-8/ledger && go test ./...
 cd hw-8/gateway && go test ./...
 ```
+
+## hw-9
+
+Конкурентный расчёт отчёта в Ledger и таймаут запросов в Gateway.
+Подробно: [hw-9/ledger/README.md](hw-9/ledger/README.md), [hw-9/gateway/README.md](hw-9/gateway/README.md).
+
+- `GET /api/reports/summary?from=YYYY-MM-DD&to=YYYY-MM-DD` — суммы расходов по категориям.
+  Ledger берёт список категорий за период (`SELECT DISTINCT`), считает сумму каждой
+  категории в отдельной горутине (`sync.WaitGroup`), пока идёт расчёт — heartbeat
+  в лог раз в 300 мс через `time.Ticker`.
+- Middleware `Timeout` ставит на каждый `/api/*` запрос `context.WithTimeout`
+  (по умолчанию 2s, меняется через `REQUEST_TIMEOUT`). При превышении — `504` и
+  `{"error":"request timeout"}`. Все SQL-запросы используют `QueryContext`/`ExecContext`
+  с этим контекстом.
+
+```bash
+cd hw-9/gateway
+export DATABASE_URL="postgres://postgres:postgres@localhost:5433/cashapp?sslmode=disable"
+go run .                         # таймаут 2s
+REQUEST_TIMEOUT=1ms go run .     # проверка таймаута
+```

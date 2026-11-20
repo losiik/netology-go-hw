@@ -46,7 +46,7 @@ func New(ctx context.Context, cfg Config) (*redis.Client, error) {
 
 	if err := rdb.Ping(ctx).Err(); err != nil {
 		rdb.Close()
-		return nil, fmt.Errorf("Redis недоступен (%s): %w", cfg.Addr, err)
+		return nil, fmt.Errorf("redis недоступен (%s): %w", cfg.Addr, err)
 	}
 	return rdb, nil
 }
