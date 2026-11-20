@@ -1,0 +1,116 @@
+syntax = "proto3";
+
+package ledger.v1;
+
+option go_package = "proto/ledgerv1;ledgerv1";
+
+service LedgerService {
+  rpc SetBudget(SetBudgetRequest) returns (SetBudgetResponse);
+  rpc ListBudgets(ListBudgetsRequest) returns (ListBudgetsResponse);
+  rpc AddTransaction(AddTransactionRequest) returns (AddTransactionResponse);
+  rpc ListTransactions(ListTransactionsRequest) returns (ListTransactionsResponse);
+  rpc GetReportSummary(GetReportSummaryRequest) returns (GetReportSummaryResponse);
+  rpc ImportTransactions(ImportTransactionsRequest) returns (ImportTransactionsResponse);
+  rpc ImportCSV(ImportCSVRequest) returns (ImportCSVResponse);
+  rpc ExportCSV(ExportCSVRequest) returns (ExportCSVResponse);
+}
+
+message Budget {
+  string category = 1;
+  double limit = 2;
+}
+
+message Transaction {
+  int64 id = 1;
+  double amount = 2;
+  string category = 3;
+  string description = 4;
+  string date = 5;
+}
+
+message CategoryReport {
+  string category = 1;
+  double total = 2;
+  optional double budget = 3;
+  optional double budget_percent = 4;
+}
+
+message ImportError {
+  int32 index = 1;
+  int32 line = 2;
+  string error = 3;
+}
+
+message ImportSummary {
+  int32 total = 1;
+  int32 accepted = 2;
+  int32 rejected = 3;
+  repeated ImportError errors = 4;
+}
+
+message SetBudgetRequest {
+  Budget budget = 1;
+}
+
+message SetBudgetResponse {
+  Budget budget = 1;
+}
+
+message ListBudgetsRequest {}
+
+message ListBudgetsResponse {
+  repeated Budget budgets = 1;
+}
+
+message AddTransactionRequest {
+  Transaction transaction = 1;
+}
+
+message AddTransactionResponse {
+  Transaction transaction = 1;
+}
+
+message ListTransactionsRequest {}
+
+message ListTransactionsResponse {
+  repeated Transaction transactions = 1;
+}
+
+message GetReportSummaryRequest {
+  string from = 1;
+  string to = 2;
+}
+
+message GetReportSummaryResponse {
+  string from = 1;
+  string to = 2;
+  double total = 3;
+  repeated CategoryReport categories = 4;
+}
+
+message ImportTransactionsRequest {
+  repeated Transaction transactions = 1;
+  int32 workers = 2;
+}
+
+message ImportTransactionsResponse {
+  ImportSummary summary = 1;
+}
+
+message ImportCSVRequest {
+  bytes data = 1;
+  int32 workers = 2;
+}
+
+message ImportCSVResponse {
+  ImportSummary summary = 1;
+}
+
+message ExportCSVRequest {
+  string from = 1;
+  string to = 2;
+}
+
+message ExportCSVResponse {
+  bytes data = 1;
+}

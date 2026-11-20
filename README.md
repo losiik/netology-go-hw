@@ -506,3 +506,16 @@ docker compose logs -f gateway
 docker compose down        # данные остаются в томе pgdata
 docker compose down -v     # удалить и данные
 ```
+
+## final-hw
+
+Итоговый проект «Система аналитики личных трат» — три микросервиса на gRPC (gateway, ledger,
+auth), PostgreSQL, Redis, JWT, CSV-импорт и экспорт, Google Таблицы как UI.
+Полное описание, cURL-примеры и шаги подключения таблицы: [final-hw/README.md](final-hw/README.md).
+
+```bash
+cd final-hw
+cp .env.example .env
+docker compose up -d --build
+curl http://localhost:8080/ping
+```

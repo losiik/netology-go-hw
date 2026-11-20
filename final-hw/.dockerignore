@@ -1,0 +1,9 @@
+**/*.exe
+**/*.out
+**/cover.*
+**/*.md
+**/Dockerfile
+.env
+sheets
+examples
+docker
