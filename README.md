@@ -441,3 +441,68 @@ Ledger: producer → канал `jobs` → N воркеров (`sync.WaitGroup`)
 docker run --rm -v "$(pwd)/hw-10:/src" -v gomodcache:/go/pkg/mod -e CGO_ENABLED=1 golang:1.27 \
   bash -c "cd /src/ledger && go test ./... -race && cd /src/gateway && go test ./... -race"
 ```
+
+## hw-11
+
+Gateway в Docker, запуск через Docker Compose вместе с PostgreSQL и Redis.
+Подробно: [hw-11/gateway/README.md](hw-11/gateway/README.md), [hw-11/ledger/README.md](hw-11/ledger/README.md).
+
+```
+hw-11/
+├── docker-compose.yml      db (postgres:18), redis, gateway
+├── gateway/Dockerfile      golang:1.27-alpine → alpine, порт 8080
+└── ledger/Dockerfile       golang:1.27-alpine → alpine (в compose пока не запускается)
+```
+
+Сервисы compose:
+
+| Сервис    | Образ / сборка | Порт на хосте | Healthcheck |
+|-----------|----------------|---------------|-------------|
+| `db`      | `postgres:18-alpine`, том `pgdata` | `5434` → 5432 | `pg_isready` |
+| `redis`   | `redis:7-alpine` (кеш отчётов, нужен gateway) | — | `redis-cli ping` |
+| `gateway` | `./gateway/Dockerfile` | `8080` → 8080 | `wget -qO- http://localhost:8080/ping` |
+
+Gateway ходит в базу по имени сервиса: `DATABASE_URL=postgres://postgres:postgres@db:5432/cashapp?sslmode=disable`,
+`REDIS_ADDR=redis:6379`. `depends_on` с `condition: service_healthy` — gateway стартует
+только после того, как db и redis прошли healthcheck.
+
+Порт БД на хосте — `5434`, потому что 5432 занят локальным PostgreSQL, а 5433 — контейнером
+из hw-7. Порты меняются переменными `DB_PORT` и `GATEWAY_PORT`.
+
+### Запуск
+
+Из папки `hw-11`. Если gateway уже запущен через `go run`, остановите его — порт 8080 должен быть свободен.
+
+1. PostgreSQL, дождаться `healthy`:
+   ```bash
+   docker compose up -d db
+   docker compose ps          # db ... (healthy)
+   ```
+2. Миграции Goose с хоста через проброшенный порт:
+   ```bash
+   goose -dir ./ledger/migrations postgres "postgres://postgres:postgres@localhost:5434/cashapp?sslmode=disable" up
+   ```
+3. Gateway (redis поднимется автоматически по `depends_on`):
+   ```bash
+   docker compose up -d --build gateway
+   docker compose ps          # gateway ... (healthy)
+   ```
+4. Проверка изнутри контейнера и снаружи:
+   ```bash
+   docker compose exec gateway wget -qO- http://localhost:8080/ping
+   curl http://localhost:8080/ping
+   curl -X POST http://localhost:8080/api/budgets -H "Content-Type: application/json" -d '{"category":"food","limit":1000}'
+   curl http://localhost:8080/api/budgets
+   curl -X POST http://localhost:8080/api/transactions -H "Content-Type: application/json" -d '{"amount":450,"category":"food","date":"2025-09-10"}'
+   curl http://localhost:8080/api/transactions
+   curl -X POST "http://localhost:8080/api/transactions/bulk?workers=4" -H "Content-Type: application/json" -d '[{"amount":100,"category":"food","date":"2025-09-12"},{"amount":300,"category":"taxi","date":"2025-09-13"}]'
+   curl "http://localhost:8080/api/reports/summary?from=2025-09-01&to=2025-09-30"
+   ```
+
+Логи и остановка:
+
+```bash
+docker compose logs -f gateway
+docker compose down        # данные остаются в томе pgdata
+docker compose down -v     # удалить и данные
+```
