@@ -116,3 +116,99 @@ go run .
 4. Тест 5 — транзакции с суммой 0, отрицательной суммой, без категории и с неверной
    датой отклоняются с `невалидная транзакция: ...`.
 5. В итоговом списке 6 транзакций, отклонённых там нет.
+
+## hw-5
+
+REST API в Gateway. Gateway импортирует модуль `ledger` из этого же репозитория
+(в `gateway/go.mod` указаны `require ledger v0.0.0` и `replace ledger => ../ledger`).
+Данные хранятся в памяти и пропадают после перезапуска.
+
+Структура:
+
+```
+hw-5/
+├── gateway/
+│   ├── main.go              запуск сервера на :8080
+│   └── internal/api/
+│       ├── dto.go           запросы/ответы и преобразование в ledger.Transaction / ledger.Budget
+│       ├── handlers.go      обработчики
+│       ├── middleware.go    логирование и Content-Type
+│       └── router.go        маршруты
+└── ledger/
+    ├── *.go                 пакет ledger (транзакции, бюджеты, валидация)
+    └── cmd/ledger/main.go   консольная демонстрация из hw-4
+```
+
+Запуск:
+
+```bash
+cd hw-5/gateway
+go run .
+```
+
+### Эндпоинты
+
+| Метод | Путь                | Описание                     | Ответ                    |
+|-------|---------------------|------------------------------|--------------------------|
+| GET   | `/ping`             | проверка сервера             | 200 `"pong"`             |
+| POST  | `/api/transactions` | создать транзакцию           | 201 / 400 / 409 / 500    |
+| GET   | `/api/transactions` | список транзакций            | 200, массив (или `[]`)   |
+| POST  | `/api/budgets`      | создать или обновить бюджет  | 201 / 400 / 500          |
+| GET   | `/api/budgets`      | список бюджетов              | 200, массив (или `[]`)   |
+
+Все ответы имеют заголовок `Content-Type: application/json; charset=utf-8`.
+Ошибки возвращаются в формате `{"error":"..."}`:
+
+- 400 — невалидные данные или неверный JSON;
+- 404 — неизвестный путь;
+- 405 — неподдерживаемый метод;
+- 409 — превышен бюджет (`{"error":"budget exceeded"}`);
+- 500 — прочие внутренние ошибки.
+
+Каждый запрос логируется в консоль: метод, путь, время обработки.
+
+### Примеры cURL
+
+Установить бюджет:
+
+```bash
+curl -X POST http://localhost:8080/api/budgets \
+  -H "Content-Type: application/json" \
+  -d '{"category":"еда","limit":1000}'
+```
+
+Добавить транзакцию:
+
+```bash
+curl -X POST http://localhost:8080/api/transactions \
+  -H "Content-Type: application/json" \
+  -d '{"amount":450,"category":"еда","description":"ланч","date":"2025-09-10"}'
+```
+
+Превышение бюджета → 409. Выполните запрос ниже два раза: первый пройдёт
+(450 + 450 = 900 ≤ 1000), второй вернёт `{"error":"budget exceeded"}` (900 + 450 > 1000):
+
+```bash
+curl -i -X POST http://localhost:8080/api/transactions \
+  -H "Content-Type: application/json" \
+  -d '{"amount":450,"category":"еда","description":"ужин","date":"2025-09-10"}'
+```
+
+Невалидная транзакция → 400:
+
+```bash
+curl -i -X POST http://localhost:8080/api/transactions \
+  -H "Content-Type: application/json" \
+  -d '{"amount":0,"category":"еда","date":"2025-09-10"}'
+```
+
+Списки:
+
+```bash
+curl http://localhost:8080/api/transactions
+curl http://localhost:8080/api/budgets
+```
+
+> На Windows curl передаёт кириллицу из аргументов не в UTF-8, и в ответе вместо
+> «еда» будут знаки вопроса. Чтобы этого не было, положите тело запроса в UTF-8
+> файл и отправьте его через `--data-binary @body.json`, либо используйте латиницу.
