@@ -12,6 +12,7 @@ bin/
 go.work
 go.work.sum
 coverage.*
+cover.*
 *.coverprofile
 
 # Env

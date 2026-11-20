@@ -212,3 +212,56 @@ curl http://localhost:8080/api/budgets
 > На Windows curl передаёт кириллицу из аргументов не в UTF-8, и в ответе вместо
 > «еда» будут знаки вопроса. Чтобы этого не было, положите тело запроса в UTF-8
 > файл и отправьте его через `--data-binary @body.json`, либо используйте латиницу.
+
+## hw-6
+
+Тесты для Ledger и Gateway. Код сервисов такой же, как в hw-5, в ledger добавлена
+функция `Reset()` (`reset.go`) — очищает транзакции и бюджеты между тестами.
+
+- `ledger/ledger_test.go` — unit-тесты домена: табличные тесты `Validate()` для
+  `Transaction` и `Budget` (параллельные), сценарий «бюджет → транзакция в лимите →
+  превышение», `LoadBudgets`, `ListBudgets`, `CheckValid`.
+- `gateway/internal/api/handlers_test.go` — интеграционные тесты HTTP через
+  `httptest`: создание и список бюджетов и транзакций, коды 201/200/400/404/405/409,
+  формат `{"error":"..."}`, заголовок `Content-Type`. Каждый подтест начинается
+  с `ledger.Reset()`, поэтому они не параллельные.
+
+### Запуск тестов
+
+Тесты запускаются отдельно в каждом модуле:
+
+```bash
+cd hw-6/ledger
+go test ./... -v
+```
+
+```bash
+cd hw-6/gateway
+go test ./... -v
+```
+
+Покрытие и HTML-отчёт (в каждой из папок):
+
+```bash
+go test ./... -cover -coverprofile=cover.out
+go tool cover -html=cover.out -o cover.html
+```
+
+В PowerShell аргументы с точкой нужно взять в кавычки, иначе go их не поймёт:
+`go test ./... -cover "-coverprofile=cover.out"` и
+`go tool cover "-html=cover.out" -o cover.html`.
+
+Файлы `cover.out` и `cover.html` добавлены в `.gitignore`.
+
+### Покрытие
+
+| Пакет                  | Покрытие |
+|------------------------|----------|
+| `ledger`               | 98.9%    |
+| `gateway/internal/api` | 93.1%    |
+
+Покрытие тестами ~95% для кода с бизнес-логикой и HTTP-слоем. `main` обоих сервисов
+(`gateway/main.go` и консольная демонстрация `ledger/cmd/ledger`) тестами не покрыт,
+поэтому общий процент по модулям ниже: ledger — 23.4%, gateway — 90.4%. Не покрыты
+также ветки 500 в обработчиках (после успешной валидации ledger не возвращает других
+ошибок, и вызвать их из теста нельзя) и логирование ошибки записи ответа в `writeJSON`.
